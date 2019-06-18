@@ -20,7 +20,7 @@ import pc_util
 
 sys.path.append(os.path.join(ROOT_DIR, 'data_prep'))
 import scannet_dataset
-os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
+os.environ["CUDA_VISIBLE_DEVICES"]="1,0"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--num_gpus', type=int, default=2, help='How many gpus to use [default: 1]')
@@ -178,13 +178,10 @@ def train():
                         # Evenly split input data to each GPU
                         pc_batch = tf.slice(pointclouds_pl,
                                             [i * DEVICE_BATCH_SIZE, 0, 0], [DEVICE_BATCH_SIZE, -1, -1])
-                        print(DEVICE_BATCH_SIZE)
-                        print(labels_pl.shape)
                         label_batch = tf.slice(labels_pl, [i * DEVICE_BATCH_SIZE,0], [DEVICE_BATCH_SIZE,-1])
-
-                        pred, end_points = MODEL.get_model(pc_batch, is_training=is_training_pl, num_class=21, bn_decay=bn_decay)
-
-                        MODEL.get_loss(pred, label_batch, smpws_pl)
+                        smpws_batch = tf.slice(smpws_pl, [i * DEVICE_BATCH_SIZE, 0], [DEVICE_BATCH_SIZE, -1])
+                        pred, end_points = MODEL.get_model(pc_batch, is_training=is_training_pl, num_class=NUM_CLASSES, bn_decay=bn_decay)
+                        MODEL.get_loss(pred, label_batch, smpws_batch)
                         losses = tf.get_collection('losses', scope)
                         total_loss = tf.add_n(losses, name='total_loss')
                         for l in losses + [total_loss]:
@@ -204,7 +201,7 @@ def train():
             grads = average_gradients(tower_grads)
             train_op = optimizer.apply_gradients(grads, global_step=batch)
 
-            correct = tf.equal(tf.argmax(pred, 1), tf.to_int64(labels_pl))
+            correct = tf.equal(tf.argmax(pred, 2), tf.to_int64(labels_pl))
             accuracy = tf.reduce_sum(tf.cast(correct, tf.float32)) / float(BATCH_SIZE* NUM_POINT)
             tf.summary.scalar('accuracy', accuracy)
 
